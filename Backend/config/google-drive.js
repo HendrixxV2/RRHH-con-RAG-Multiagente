@@ -1,20 +1,31 @@
 // Backend/config/google-drive.js
 const { google } = require('googleapis');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
-// Leemos la ruta del archivo de credenciales desde el .env, o usamos una ruta por defecto
-const keyFilePath = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(__dirname, '..', 'service-account-key.json');
+// Resolvemos la ruta absoluta del archivo JSON
+const keyFilePath = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  ? path.resolve(process.env.GOOGLE_APPLICATION_CREDENTIALS)
+  : path.join(__dirname, '..', 'service-account-key.json');
 
-// Configuramos la autenticación con los scopes necesarios (solo lectura para Drive)
+// Verificamos que el archivo exista antes de intentar leerlo
+if (!fs.existsSync(keyFilePath)) {
+  console.error(`\n❌ ERROR: No se encontró el archivo de credenciales en la ruta:`);
+  console.error(`👉 ${keyFilePath}`);
+  console.error(`\nAsegúrate de que el archivo JSON descargado de Google Cloud esté en esa ubicación y se llame 'service-account-key.json'.\n`);
+  process.exit(1); // Detenemos la ejecución para evitar errores confusos
+}
+
+// Leemos el contenido del JSON y lo parseamos
+const credentials = JSON.parse(fs.readFileSync(keyFilePath, 'utf-8'));
+
+// Creamos el cliente de autenticación usando el objeto de credenciales (método no deprecado)
 const auth = new google.auth.GoogleAuth({
-  keyFile: keyFilePath,
+  credentials: credentials,
   scopes: ['https://www.googleapis.com/auth/drive.readonly'],
 });
 
-/**
- * Retorna un cliente autenticado de Google Drive v3
- */
 async function getDriveClient() {
   try {
     const authClient = await auth.getClient();
