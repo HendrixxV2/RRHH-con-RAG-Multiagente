@@ -1,0 +1,7 @@
+**/node_modules/
+**/dist/
+.env
+.env.*
+!.env.example
+**/service-account-key.json
+**/drive_sync_token.json
