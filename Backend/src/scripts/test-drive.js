@@ -1,6 +1,7 @@
 // Backend/src/scripts/test-drive.js
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 const { getDriveClient } = require('../../config/google-drive');
-require('dotenv').config();
 
 async function testConnection() {
   console.log('🔄 Probando conexión con Google Drive...');
@@ -9,7 +10,7 @@ async function testConnection() {
     const drive = await getDriveClient();
     
     // Intentamos listar los archivos dentro de la carpeta configurada en el .env
-    const folderId = process.env.DRIVE_FOLDER_ID;
+    const folderId = process.env.DRIVE_FOLDER_ID?.trim().split('?')[0];
     
     if (!folderId) {
       console.warn('⚠️ No has configurado DRIVE_FOLDER_ID en el .env. Listando todos los archivos accesibles...');
@@ -26,6 +27,7 @@ async function testConnection() {
     }
   } catch (error) {
     console.error('❌ Error en la prueba:', error.message);
+    process.exitCode = 1;
   }
 }
 
