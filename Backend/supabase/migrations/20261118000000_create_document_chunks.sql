@@ -1,5 +1,6 @@
 create schema if not exists extensions;
 create extension if not exists vector with schema extensions;
+set search_path = public, extensions;
 
 create table if not exists public.document_chunks (
   id bigint generated always as identity primary key,
@@ -8,7 +9,7 @@ create table if not exists public.document_chunks (
   mime_type text not null,
   chunk_index integer not null check (chunk_index >= 0),
   content text not null,
-  embedding extensions.vector(384) not null,
+  embedding vector(384) not null,
   updated_at timestamptz not null default now(),
   unique (file_id, chunk_index)
 );
@@ -19,7 +20,7 @@ create index if not exists document_chunks_embedding_hnsw_idx
 alter table public.document_chunks enable row level security;
 
 create or replace function public.match_document_chunks(
-  query_embedding extensions.vector(384),
+  query_embedding vector(384),
   match_count integer default 5,
   match_threshold real default 0.25
 )
@@ -49,4 +50,4 @@ $$;
 
 grant select, insert, update, delete on public.document_chunks to service_role;
 grant usage, select on sequence public.document_chunks_id_seq to service_role;
-grant execute on function public.match_document_chunks(extensions.vector, integer, real) to service_role;
+grant execute on function public.match_document_chunks(vector, integer, real) to service_role;
