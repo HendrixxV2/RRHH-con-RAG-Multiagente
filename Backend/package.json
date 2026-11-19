@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "ingest:drive": "node src/scripts/ingest-drive.js",
+    "test": "node --test test"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +15,7 @@
   "type": "commonjs",
   "dependencies": {
     "@google/genai": "^3.6.0",
+    "@huggingface/transformers": "^4.3.2",
     "@supabase/supabase-js": "^2.119.1",
     "dotenv": "^18.0.10",
     "express": "^5.3.0",

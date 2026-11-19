@@ -1,121 +1,132 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
+const API_URL = import.meta.env.VITE_API_URL || '/api'
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      content: 'Hola. Puedo responder preguntas basándome en los documentos de Recursos Humanos indexados.'
+    }
+  ])
+  const [question, setQuestion] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [apiOnline, setApiOnline] = useState(false)
+  const bottomRef = useRef(null)
+
+  useEffect(() => {
+    fetch(`${API_URL}/health`)
+      .then(response => setApiOnline(response.ok))
+      .catch(() => setApiOnline(false))
+  }, [])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, loading])
+
+  async function sendQuestion(event) {
+    event.preventDefault()
+    const prompt = question.trim()
+    if (!prompt || loading) return
+
+    const history = messages.filter(message => message.role === 'user' || message.role === 'assistant')
+    setMessages(current => [...current, { role: 'user', content: prompt }])
+    setQuestion('')
+    setLoading(true)
+
+    try {
+      const response = await fetch(`${API_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: prompt, history })
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'No se pudo completar la consulta')
+
+      setMessages(current => [
+        ...current,
+        { role: 'assistant', content: result.answer, sources: result.sources || [] }
+      ])
+      setApiOnline(true)
+    } catch (error) {
+      setMessages(current => [
+        ...current,
+        { role: 'assistant', content: `No pude completar la consulta: ${error.message}`, error: true }
+      ])
+      setApiOnline(false)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="brand-mark" aria-hidden="true">RH</div>
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+          <p className="eyebrow">Asistente documental</p>
+          <h1>Recursos Humanos</h1>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+        <div className={`connection ${apiOnline ? 'online' : ''}`} role="status">
+          <span />
+          {apiOnline ? 'API conectada' : 'API sin conexión'}
+        </div>
+      </header>
+
+      <section className="chat-panel" aria-label="Conversación">
+        <div className="messages" aria-live="polite">
+          {messages.map((message, index) => (
+            <article
+              className={`message ${message.role} ${message.error ? 'error' : ''}`}
+              key={`${message.role}-${index}`}
+            >
+              <span className="message-label">{message.role === 'user' ? 'Tú' : 'Asistente RRHH'}</span>
+              <p>{message.content}</p>
+              {message.sources?.length > 0 && (
+                <div className="sources">
+                  <span>Fuentes</span>
+                  {message.sources.map(source => (
+                    <a
+                      href={`https://drive.google.com/open?id=${encodeURIComponent(source.fileId)}`}
+                      key={`${source.fileId}-${source.index}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      [{source.index}] {source.fileName}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+          {loading && <p className="typing" role="status">Buscando en los documentos...</p>}
+          <div ref={bottomRef} />
+        </div>
+
+        <form className="composer" onSubmit={sendQuestion}>
+          <label className="sr-only" htmlFor="question">Escribe tu pregunta</label>
+          <textarea
+            id="question"
+            maxLength={4000}
+            onChange={event => setQuestion(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                event.currentTarget.form.requestSubmit()
+              }
+            }}
+            placeholder="Pregunta sobre políticas, vacaciones, beneficios..."
+            rows={2}
+            value={question}
+          />
+          <button disabled={loading || !question.trim()} type="submit">
+            {loading ? 'Consultando…' : 'Enviar'}
+          </button>
+        </form>
+        <p className="disclaimer">Las respuestas se basan en documentos indexados y pueden requerir verificación.</p>
       </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    </main>
   )
 }
 

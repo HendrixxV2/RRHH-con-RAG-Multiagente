@@ -6,33 +6,38 @@
  * @param {number} overlap - Caracteres de solapamiento
  */
 function fragmentarTexto(texto, maxChars = 2500, overlap = 250) {
-  if (!texto) return [];
-  
-  const parrafos = texto.split(/\n\s*\n/);
-  const chunks = [];
-  let chunkActual = '';
+  if (typeof texto !== 'string') {
+    throw new TypeError('El texto debe ser una cadena');
+  }
+  if (!Number.isInteger(maxChars) || maxChars <= 0) {
+    throw new RangeError('maxChars debe ser un entero positivo');
+  }
+  if (!Number.isInteger(overlap) || overlap < 0 || overlap >= maxChars) {
+    throw new RangeError('overlap debe ser un entero entre 0 y maxChars - 1');
+  }
 
-  for (const parrafo of parrafos) {
-    if ((chunkActual + parrafo).length <= maxChars) {
-      chunkActual += parrafo + '\n\n';
-    } else {
-      if (chunkActual.trim()) chunks.push(chunkActual.trim());
-      
-      // Si el párrafo es más grande que el límite, lo cortamos forzosamente
-      if (parrafo.length > maxChars) {
-        for (let i = 0; i < parrafo.length; i += (maxChars - overlap)) {
-          chunks.push(parrafo.slice(i, i + maxChars));
-        }
-        chunkActual = '';
-      } else {
-        // Aplicamos solapamiento tomando el final del chunk anterior
-        const inicioOverlap = Math.max(0, chunkActual.length - overlap);
-        chunkActual = chunkActual.slice(inicioOverlap) + parrafo + '\n\n';
+  const contenido = texto.trim();
+  if (!contenido) return [];
+
+  const chunks = [];
+  let inicio = 0;
+
+  while (inicio < contenido.length) {
+    let fin = Math.min(inicio + maxChars, contenido.length);
+    if (fin < contenido.length) {
+      const limiteParrafo = contenido.lastIndexOf('\n\n', fin);
+      if (limiteParrafo > inicio + maxChars / 2) {
+        fin = limiteParrafo;
       }
     }
+
+    const chunk = contenido.slice(inicio, fin).trim();
+    if (chunk) chunks.push(chunk);
+    if (fin >= contenido.length) break;
+
+    inicio = Math.max(inicio + 1, fin - overlap);
   }
-  if (chunkActual.trim()) chunks.push(chunkActual.trim());
-  
+
   return chunks;
 }
 

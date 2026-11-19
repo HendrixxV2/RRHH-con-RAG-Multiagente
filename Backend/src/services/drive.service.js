@@ -1,6 +1,7 @@
 // Backend/src/services/drive.service.js
 const { getDriveClient } = require('../../config/google-drive');
-const pdf = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
+const mammoth = require('mammoth');
 
 /**
  * Extrae el texto de un archivo de Google Drive según su MIME type.
@@ -12,6 +13,15 @@ async function extraerTexto(fileId, mimeType) {
   const drive = await getDriveClient();
 
   try {
+    if (!mimeType) {
+      const metadata = await drive.files.get({ fileId, fields: 'mimeType' });
+      mimeType = metadata.data.mimeType;
+    }
+
+    if (!mimeType) {
+      throw new Error(`No se pudo determinar el tipo MIME del archivo ${fileId}`);
+    }
+
     // 1. GOOGLE DOCS NATIVOS -> Exportar como texto plano
     if (mimeType === 'application/vnd.google-apps.document') {
       const res = await drive.files.export(
@@ -43,14 +53,27 @@ async function extraerTexto(fileId, mimeType) {
     }
     const buffer = Buffer.concat(chunks);
 
-    // Si es un PDF, usamos pdf-parse
+    // Los binarios se parsean según su formato.
     if (mimeType === 'application/pdf') {
-      const data = await pdf(buffer);
-      return data.text;
+      const parser = new PDFParse({ data: buffer });
+      try {
+        const result = await parser.getText();
+        return result.text;
+      } finally {
+        await parser.destroy();
+      }
     }
 
-    // Fallback: Si es texto plano u otro formato legible
-    return buffer.toString('utf-8');
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    }
+
+    if (mimeType === 'text/plain' || mimeType === 'text/csv') {
+      return buffer.toString('utf-8');
+    }
+
+    throw new Error(`Formato no compatible para extracción: ${mimeType}`);
 
   } catch (error) {
     console.error(`❌ Error extrayendo texto del archivo ${fileId}:`, error.message);
