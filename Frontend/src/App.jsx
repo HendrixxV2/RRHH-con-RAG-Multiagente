@@ -13,6 +13,10 @@ function App() {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [apiOnline, setApiOnline] = useState(null)
+  const [actor, setActor] = useState(null)
+  const [view, setView] = useState('chat')
+  const [dashboard, setDashboard] = useState(null)
+  const [dashboardLoading, setDashboardLoading] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -20,7 +24,28 @@ function App() {
     fetch(`${API_URL}/health`)
       .then(response => setApiOnline(response.ok))
       .catch(() => setApiOnline(false))
+    fetch(`${API_URL}/me`, { headers: { 'x-user-id': 'EMP-001', 'x-user-role': 'rrhh' } })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => setActor(result?.actor || null))
+      .catch(() => setActor(null))
   }, [])
+
+  async function openDashboard() {
+    setView('dashboard')
+    setDashboardLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/dashboard`, {
+        headers: { 'x-user-id': 'EMP-001', 'x-user-role': 'rrhh' }
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'No se pudo cargar el dashboard')
+      setDashboard(result)
+    } catch (error) {
+      setDashboard({ error: error.message })
+    } finally {
+      setDashboardLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (messages.length) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -39,7 +64,11 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': actor?.id || 'EMP-001',
+          'x-user-role': actor?.rol || 'rrhh'
+        },
         body: JSON.stringify({ question: prompt, history })
       })
       const result = await response.json()
@@ -85,6 +114,11 @@ function App() {
           <button className="nav-item active" onClick={newConversation} type="button" disabled={loading}>
             <span className="nav-icon">✳</span><span>Asistente</span><span className="nav-arrow">↗</span>
           </button>
+          {actor?.rol === 'rrhh' && (
+            <button className={`nav-item ${view === 'dashboard' ? 'active' : ''}`} onClick={openDashboard} type="button">
+              <span className="nav-icon">▦</span><span>Dashboard RRHH</span><span className="nav-arrow">↗</span>
+            </button>
+          )}
           <div className="sidebar-note">
             <span className="note-sparkle">✳</span>
             <p>Las respuestas que necesitas, <em>en un solo lugar.</em></p>
@@ -109,6 +143,40 @@ function App() {
 
         <section className="workspace" aria-label="Asistente de Recursos Humanos">
           <div className="workspace-inner">
+            {view === 'dashboard' ? (
+              <div className="dashboard-view">
+                <div className="conversation-heading">
+                  <div><span className="section-number">RRHH / DASHBOARD</span><h1>Reporte ejecutivo <em>diario.</em></h1></div>
+                  <button className="reset-button" onClick={() => setView('chat')} type="button">← Volver al chat</button>
+                </div>
+                {dashboardLoading && <p>Calculando indicadores...</p>}
+                {dashboard?.error && <p className="error">{dashboard.error}</p>}
+                {dashboard && !dashboard.error && (
+                  <>
+                    <div className="metrics-grid">
+                      <article><span>Solicitudes &gt; 3 días</span><strong>{dashboard.latest?.indicador?.solicitudes_pendientes_mas_3_dias ?? 0}</strong></article>
+                      <article><span>Pasivo vacaciones</span><strong>{dashboard.latest?.indicador?.pasivo_vacaciones_mas_20_dias ?? 0}</strong></article>
+                      <article><span>Incapacidades 30 días</span><strong>{dashboard.latest?.indicador?.incapacidades_30_dias ?? 0}</strong></article>
+                      <article><span>Consultas 30 días</span><strong>{dashboard.latest?.indicador?.consultas_30_dias ?? 0}</strong></article>
+                    </div>
+                    {dashboard.latest?.resumen && (
+                      <article className="executive-summary"><span>RESUMEN EJECUTIVO</span><p>{dashboard.latest.resumen}</p></article>
+                    )}
+                    <div className="pending-table">
+                      <h2>Solicitudes pendientes</h2>
+                      {dashboard.solicitudes_pendientes?.length ? (
+                        <table><thead><tr><th>ID</th><th>Tipo</th><th>Inicio</th><th>Colaborador</th></tr></thead><tbody>
+                          {dashboard.solicitudes_pendientes.map(item => (
+                            <tr key={item.id}><td>{item.id}</td><td>{item.tipo}</td><td>{item.fecha_inicio || '—'}</td><td>{item.colaborador_id}</td></tr>
+                          ))}
+                        </tbody></table>
+                      ) : <p>No hay solicitudes pendientes.</p>}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+            <>
             {messages.length === 0 ? (
               <div className="welcome">
                 <div className="welcome-eyebrow"><span className="eyebrow-dot" /> TU ASISTENTE DE PERSONAS <span className="eyebrow-line" /> <span>01 / 01</span></div>
@@ -156,7 +224,7 @@ function App() {
                           <div className="sources">
                             <span>DOCUMENTOS CONSULTADOS</span>
                             {message.sources.map(source => (
-                              <a href={`https://drive.google.com/open?id=${encodeURIComponent(source.fileId)}`} key={`${source.fileId}-${source.index}`} rel="noreferrer" target="_blank">
+                              <a href={source.link || `https://drive.google.com/open?id=${encodeURIComponent(source.fileId)}`} key={`${source.fileId}-${source.index}`} rel="noreferrer" target="_blank">
                                 ↗ &nbsp;[{source.index}] {source.fileName}
                               </a>
                             ))}
@@ -194,6 +262,8 @@ function App() {
               </form>
               <div className="composer-footer"><span>↳ &nbsp; ENTER PARA ENVIAR · SHIFT + ENTER PARA SALTO DE LÍNEA</span><span>Respuestas basadas en documentos internos. Verifica la información importante.</span></div>
             </div>
+            </>
+            )}
           </div>
           <footer className="page-footer"><span>UN ESPACIO PARA LAS PERSONAS, HECHO CON CUIDADO.</span><span>ENTRENOS ©</span></footer>
         </section>

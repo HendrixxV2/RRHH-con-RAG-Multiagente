@@ -198,6 +198,77 @@
   clip-path: inset(50%);
 }
 
+.dashboard-view {
+  width: 100%;
+  min-height: 520px;
+  padding: 24px 0;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.metrics-grid article,
+.executive-summary,
+.pending-table {
+  border: 1px solid #d8d0c5;
+  border-radius: 18px;
+  background: #fffdfa;
+  padding: 18px;
+}
+
+.metrics-grid article {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metrics-grid article span,
+.executive-summary span {
+  color: #777063;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.metrics-grid article strong {
+  color: #b14f42;
+  font-size: 34px;
+}
+
+.executive-summary {
+  margin-bottom: 14px;
+}
+
+.executive-summary p {
+  line-height: 1.6;
+}
+
+.pending-table {
+  overflow-x: auto;
+}
+
+.pending-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pending-table th,
+.pending-table td {
+  border-bottom: 1px solid #ece5da;
+  padding: 10px;
+  text-align: left;
+}
+
+@media (max-width: 900px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 600px) {
   .app-shell {
     width: min(100% - 24px, 920px);
