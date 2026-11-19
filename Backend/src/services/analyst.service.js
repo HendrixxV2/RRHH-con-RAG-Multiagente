@@ -1,4 +1,5 @@
 const { supabase } = require('../../config/supabase');
+const { ejecutarAgente, AGENT_IDS } = require('./agents.service');
 
 async function generarReporteDiario() {
   const today = new Date();
@@ -70,26 +71,10 @@ async function redactarResumen(indicadores) {
       `${indicadores.pasivo_vacaciones_mas_20_dias} colaboradores presentan pasivo de vacaciones superior a 20 días.`;
   }
 
-  const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
-      temperature: 0,
-      max_tokens: 300,
-      messages: [
-        { role: 'system', content: 'Redacta exclusivamente 3 a 5 frases en español usando únicamente el JSON entregado. No inventes cifras ni causas.' },
-        { role: 'user', content: JSON.stringify(indicadores) }
-      ]
-    })
+  return ejecutarAgente(AGENT_IDS.ANALYTICS, {
+    question: 'Redacta el resumen ejecutivo de estos indicadores.',
+    context: JSON.stringify(indicadores)
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(`DeepSeek no pudo redactar el reporte: ${result.error?.message || response.status}`);
-  return result.choices?.[0]?.message?.content?.trim() || 'Resumen ejecutivo no disponible.';
 }
 
 async function obtenerDashboard() {

@@ -6,6 +6,8 @@ const INTENTS = {
   OUT_OF_SCOPE: 'fuera_de_alcance'
 };
 
+const { AGENT_IDS } = require('./agents.service');
+
 function clasificarConsulta(question) {
   const text = (question || '').toLowerCase();
   const ownPersonal = /\b(mi|mis|mío|mía|yo)\b|(?:cuál|cuantos?|cuánto).*(?:es|son).*(?:mi\s+saldo|mis\s+vacaciones)/.test(text);
@@ -23,4 +25,12 @@ function clasificarConsulta(question) {
   return INTENTS.OUT_OF_SCOPE;
 }
 
-module.exports = { clasificarConsulta, INTENTS };
+function seleccionarAgente(question, intent = clasificarConsulta(question)) {
+  if (intent === INTENTS.POLICY || intent === INTENTS.MIXED) return AGENT_IDS.POLICIES;
+  if (intent !== INTENTS.PERSONAL) return AGENT_IDS.COORDINATOR;
+
+  const requestsQuestion = /\b(vacaciones?|saldo|solicitudes?|permisos?|licencias?|incapacidades?|ausencias?)\b/i.test(question);
+  return requestsQuestion ? AGENT_IDS.REQUESTS : AGENT_IDS.PROFILE;
+}
+
+module.exports = { clasificarConsulta, seleccionarAgente, INTENTS };

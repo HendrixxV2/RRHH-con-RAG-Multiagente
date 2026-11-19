@@ -40,4 +40,39 @@ function resumirDatosPersonales(datos) {
   return lines.join('\n');
 }
 
-module.exports = { consultarDatosColaborador, resumirDatosPersonales };
+function resumirPerfilPersonal(datos) {
+  const profile = datos.perfil;
+  if (!profile) return 'No encontré un perfil registrado para tu usuario.';
+
+  return [
+    profile.departamento && `Departamento: ${profile.departamento}.`,
+    profile.cargo && `Cargo: ${profile.cargo}.`,
+    profile.fecha_ingreso && `Fecha de ingreso: ${profile.fecha_ingreso}.`,
+    typeof profile.activo === 'boolean' && `Estado: ${profile.activo ? 'activo' : 'inactivo'}.`
+  ].filter(Boolean).join('\n') || 'No encontré datos de perfil disponibles.';
+}
+
+function resumirSolicitudesPersonales(datos) {
+  const lines = [];
+  if (datos.vacaciones) {
+    lines.push(`Vacaciones: ${datos.vacaciones.dias_disponibles} días disponibles y ${datos.vacaciones.dias_usados} usados (${datos.vacaciones.periodo}).`);
+  }
+  if (datos.solicitudes.length) {
+    lines.push(`Solicitudes recientes: ${datos.solicitudes.slice(0, 5).map(item =>
+      `${item.tipo}, estado ${item.estado}, solicitada el ${item.fecha_solicitud}${item.fecha_inicio ? `, fecha de inicio ${item.fecha_inicio}${item.fecha_fin ? ` y fecha de fin ${item.fecha_fin}` : ''}` : ''}`
+    ).join('; ')}.`);
+  }
+  if (datos.incapacidades.length) {
+    lines.push(`Incapacidades recientes: ${datos.incapacidades.slice(0, 5).map(item =>
+      `${item.tipo}, ${item.dias} días, del ${item.fecha_inicio} al ${item.fecha_fin}`
+    ).join('; ')}.`);
+  }
+  return lines.join('\n') || 'No encontré vacaciones, solicitudes ni incapacidades registradas para tu usuario.';
+}
+
+module.exports = {
+  consultarDatosColaborador,
+  resumirDatosPersonales,
+  resumirPerfilPersonal,
+  resumirSolicitudesPersonales
+};
