@@ -3,13 +3,15 @@ const { generarEmbeddings } = require('./embedding.service');
 const { clasificarConsulta, seleccionarAgente, INTENTS } = require('./orchestrator.service');
 const {
   consultarDatosColaborador,
-  resumirDatosPersonales,
   resumirPerfilPersonal,
   resumirSolicitudesPersonales
 } = require('./employee-data.service');
 const { ejecutarAgente, obtenerAgente, coordinarConsulta, AGENT_IDS } = require('./agents.service');
 
 const MAX_QUESTION_LENGTH = 4000;
+const LOW_SIMILARITY_THRESHOLD = 0.45;
+const LOW_CONFIDENCE_ANSWER = 'No encontré una coincidencia suficientemente confiable en las políticas indexadas. Si necesitas confirmarlo, solicita revisión a Recursos Humanos.';
+const NO_POLICY_ANSWER = 'No encontré información relevante en las políticas indexadas. Si necesitas confirmarlo, solicita revisión a Recursos Humanos.';
 
 async function buscarContexto(question) {
   const [embedding] = await generarEmbeddings([question]);
@@ -21,6 +23,28 @@ async function buscarContexto(question) {
 
   if (error) throw new Error(`Falló la búsqueda vectorial en Supabase: ${error.message}`);
   return data || [];
+}
+
+function filtrarCoincidenciasConfiables(matches) {
+  return matches.filter(match => Number(match.similarity) >= LOW_SIMILARITY_THRESHOLD);
+}
+
+function mapearFuentes(matches) {
+  return matches.map((match, index) => ({
+    index: index + 1,
+    fileId: match.file_id,
+    fileName: match.metadata?.nombre_doc || match.file_id,
+    section: match.metadata?.sección || 'General',
+    version: match.metadata?.versión || null,
+    link: match.metadata?.enlace || null,
+    similarity: match.similarity
+  }));
+}
+
+function construirContextoPoliticas(matches) {
+  return matches.map((match, index) =>
+    `[${index + 1}] ${match.metadata?.nombre_doc || match.file_id}\nSección: ${match.metadata?.sección || 'General'}\n${match.content}`
+  ).join('\n\n');
 }
 
 async function registrarConsulta({ actor, question, answer, intent, sources, latenciaMs }) {
@@ -43,56 +67,65 @@ async function responderPregunta(question, history = [], actor = null) {
 
   const cleanQuestion = question.trim();
   const intent = clasificarConsulta(cleanQuestion);
-  const fallbackAgentId = seleccionarAgente(cleanQuestion, intent);
-  const agentId = intent === INTENTS.PERSONAL
-    ? await coordinarConsulta({
+  const policyAgentId = AGENT_IDS.POLICIES;
+  let personalAgentId = null;
+  if ([INTENTS.PERSONAL, INTENTS.MIXED].includes(intent)) {
+    personalAgentId = await coordinarConsulta({
       question: cleanQuestion,
       candidateIds: [AGENT_IDS.PROFILE, AGENT_IDS.REQUESTS],
-      fallbackId: fallbackAgentId
-    })
-    : fallbackAgentId;
+      fallbackId: seleccionarAgente(cleanQuestion, INTENTS.PERSONAL)
+    });
+  }
+
+  let agentId = policyAgentId;
   let answer;
   let sources = [];
 
   if (intent === INTENTS.RESTRICTED) {
+    agentId = AGENT_IDS.COORDINATOR;
     answer = 'No puedo consultar ni revelar datos personales de terceros. Puedo ayudarte con tus propios datos o con una consulta general de políticas.';
   } else if (intent === INTENTS.OUT_OF_SCOPE) {
+    agentId = AGENT_IDS.COORDINATOR;
     answer = 'Esta consulta está fuera de mi alcance como asistente de Recursos Humanos. Solo puedo atender políticas internas y datos personales del usuario autenticado.';
   } else if (intent === INTENTS.PERSONAL) {
+    agentId = personalAgentId;
     const personalData = await consultarDatosColaborador(actor);
     const context = agentId === AGENT_IDS.REQUESTS
       ? resumirSolicitudesPersonales(personalData)
       : resumirPerfilPersonal(personalData);
     answer = await ejecutarAgente(agentId, { question: cleanQuestion, context });
-  } else {
-    let personalText = '';
-    if (intent === INTENTS.MIXED) {
-      const personalData = await consultarDatosColaborador(actor);
-      personalText = resumirDatosPersonales(personalData);
-    }
+  } else if (intent === INTENTS.MIXED) {
+    const [personalData, matches] = await Promise.all([
+      consultarDatosColaborador(actor),
+      buscarContexto(cleanQuestion)
+    ]);
+    const reliableMatches = filtrarCoincidenciasConfiables(matches);
+    sources = mapearFuentes(reliableMatches);
 
-    const matches = await buscarContexto(cleanQuestion);
-    if (matches.length === 0) {
-      answer = personalText
-        ? `${personalText}\n\nNo encontré información adicional relevante en las políticas indexadas.`
-        : 'No encontré información relevante en los documentos indexados.';
-    } else {
-      sources = matches.map((match, index) => ({
-        index: index + 1,
-        fileId: match.file_id,
-        fileName: match.metadata?.nombre_doc || match.file_id,
-        section: match.metadata?.sección || 'General',
-        version: match.metadata?.versión || null,
-        link: match.metadata?.enlace || null,
-        similarity: match.similarity
-      }));
-      const context = matches.map((match, index) =>
-        `[${index + 1}] ${match.metadata?.nombre_doc || match.file_id}\nSección: ${match.metadata?.sección || 'General'}\n${match.content}`
-      ).join('\n\n');
-
-      answer = await ejecutarAgente(agentId, {
+    const personalContext = personalAgentId === AGENT_IDS.REQUESTS
+      ? resumirSolicitudesPersonales(personalData)
+      : resumirPerfilPersonal(personalData);
+    const policyPromise = reliableMatches.length
+      ? ejecutarAgente(policyAgentId, {
         question: cleanQuestion,
-        context: `${context}${personalText ? `\n\nDatos propios del usuario autenticado:\n${personalText}` : ''}`,
+        context: construirContextoPoliticas(reliableMatches)
+      })
+      : Promise.resolve(matches.length ? LOW_CONFIDENCE_ANSWER : NO_POLICY_ANSWER);
+    const [personalAnswer, policyAnswer] = await Promise.all([
+      ejecutarAgente(personalAgentId, { question: cleanQuestion, context: personalContext }),
+      policyPromise
+    ]);
+    answer = `Políticas:\n${policyAnswer}\n\nTus datos:\n${personalAnswer}`;
+  } else {
+    const matches = await buscarContexto(cleanQuestion);
+    const reliableMatches = filtrarCoincidenciasConfiables(matches);
+    if (!reliableMatches.length) {
+      answer = matches.length ? LOW_CONFIDENCE_ANSWER : NO_POLICY_ANSWER;
+    } else {
+      sources = mapearFuentes(reliableMatches);
+      answer = await ejecutarAgente(policyAgentId, {
+        question: cleanQuestion,
+        context: construirContextoPoliticas(reliableMatches),
         history
       });
     }
@@ -107,7 +140,17 @@ async function responderPregunta(question, history = [], actor = null) {
     latenciaMs: Date.now() - startedAt
   });
 
-  return { answer, sources, intent, agent: obtenerAgente(agentId) };
+  return {
+    answer,
+    sources,
+    intent,
+    agent: obtenerAgente(agentId),
+    ...(personalAgentId ? { agents: [obtenerAgente(policyAgentId), obtenerAgente(personalAgentId)] } : {})
+  };
 }
 
-module.exports = { responderPregunta };
+module.exports = {
+  responderPregunta,
+  filtrarCoincidenciasConfiables,
+  LOW_SIMILARITY_THRESHOLD
+};

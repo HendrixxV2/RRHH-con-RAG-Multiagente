@@ -16,6 +16,17 @@ test('API health and chat validation are reachable', async t => {
   assert.equal(health.status, 200);
   assert.equal(health.headers.get('access-control-allow-origin'), 'http://localhost:5173');
 
+  const preflight = await fetch(`${baseUrl}/api/chat`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://localhost:5173',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'authorization,content-type'
+    }
+  });
+  assert.equal(preflight.status, 204);
+  assert.match(preflight.headers.get('access-control-allow-headers'), /authorization/i);
+
   const invalidChat = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

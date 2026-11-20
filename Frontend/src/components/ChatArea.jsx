@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Bot, Loader2, Send } from 'lucide-react'
+import { Bot, Loader2, Send } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api'
@@ -22,22 +22,29 @@ function renderSources(sources) {
         >
           <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
           [{source.index || index + 1}] {source.fileName || source.document || 'Documento'}
+          {source.section ? ` · ${source.section}` : ''}
+          {source.version ? ` · v${source.version}` : ''}
         </a>
       ))}
     </div>
   )
 }
 
-export default function ChatArea() {
+function initials(name = '') {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase() || 'U'
+}
+
+export default function ChatArea({ accessToken, actor }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '¡Hola Ana! Tienes 3 tareas urgentes hoy. ¿Repasamos el resumen?',
-      tasks: [
-        { id: 1, title: 'Revisión de CVs (15)', status: 'Pendiente', statusColor: 'accent' },
-        { id: 2, title: 'Entrevista con Laura S. (Marketing)', time: '14:00', status: null },
-        { id: 3, title: 'Actualización de Políticas de Vacaciones', status: 'En Progreso', statusColor: 'primary' },
-      ],
+      content: `Hola${actor?.nombre ? ` ${actor.nombre}` : ''}. Puedo ayudarte con políticas internas y con tus datos de Recursos Humanos.`,
       sources: [],
     },
   ])
@@ -71,8 +78,7 @@ export default function ChatArea() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': 'EMP-001',
-          'x-user-role': 'rrhh',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ question, history }),
       })
@@ -88,6 +94,7 @@ export default function ChatArea() {
           role: 'assistant',
           content: result.answer || result.respuesta || 'Sin respuesta',
           sources: result.sources || result.citas || [],
+          agent: result.agent?.name,
         },
       ])
     } catch (error) {
@@ -102,7 +109,7 @@ export default function ChatArea() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-screen min-h-0 relative overflow-hidden">
+    <div className="relative flex h-[calc(100dvh-120px)] min-h-[480px] flex-1 flex-col overflow-hidden md:h-screen">
       <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-32 -mt-24" />
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-secondary/10 rounded-full blur-3xl -ml-24 -mb-24 dark:hidden" />
 
@@ -110,23 +117,20 @@ export default function ChatArea() {
         <div className="flex items-center gap-7">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-primary shadow-glow" />
-            <span className="font-semibold text-gray-900 dark:text-white text-xs tracking-wider uppercase">Inter font</span>
+            <span className="font-semibold text-gray-900 dark:text-white text-xs tracking-wider uppercase">Asistente de RR. HH.</span>
           </div>
-          <button type="button" aria-label="Notificaciones" className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-            <Bell className="w-5 h-5" />
-          </button>
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <div className="hidden md:flex items-center gap-3 pr-4 border-r border-white/60 dark:border-white/10">
-            <img
-              src="https://ui-avatars.com/api/?name=Ana+Garcia&background=00BFA5&color=fff&size=36&bold=true"
-              alt="Ana García"
-              className="w-9 h-9 rounded-xl object-cover border border-white/60 dark:border-white/10 shadow-soft"
-            />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-xs font-bold text-primary">
+              {initials(actor?.nombre)}
+            </div>
             <div className="text-right">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white leading-none">Ana García</p>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-none uppercase tracking-wider">HR Manager</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white leading-none">{actor?.nombre}</p>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-none uppercase tracking-wider">
+                {actor?.rol === 'rrhh' ? 'RR. HH.' : 'Colaborador'}
+              </p>
             </div>
           </div>
         </div>
@@ -138,11 +142,9 @@ export default function ChatArea() {
             <div className="w-7 h-7 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30">
               <Bot className="w-3.5 h-3.5 fill-current" />
             </div>
-            <span className="font-semibold text-sm tracking-tight">HR Assistant Chat</span>
+            <span className="font-semibold text-sm tracking-tight">Chat de Recursos Humanos</span>
           </div>
-          <button type="button" className="text-xs bg-white/20 hover:bg-white/30 backdrop-blur-sm px-3 py-1.5 rounded-2xl transition-colors border border-white/30 flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-accent shadow-[0_0_8px_rgba(255,152,0,0.5)]" /> + Tarea
-          </button>
+          <span className="text-xs text-white/90">Consulta tus políticas y datos</span>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8" aria-live="polite">
@@ -155,25 +157,12 @@ export default function ChatArea() {
                   </div>
                   <div className="flex-1">
                     <div className="rounded-3xl bg-white dark:bg-surface-dark p-5 text-gray-800 dark:text-slate-200 shadow-card dark:shadow-card-dark border border-white/60 dark:border-white/10">
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                      {message.tasks?.length > 0 && (
-                        <div className="mt-5 space-y-3">
-                          {message.tasks.map((task) => (
-                            <div key={task.id} className="flex items-start gap-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${task.statusColor === 'accent' ? 'bg-accent' : task.statusColor === 'primary' ? 'bg-primary' : 'bg-gray-400'}`} />
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{task.title}</span>
-                              </div>
-                              {task.status && (
-                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${task.statusColor === 'accent' ? 'bg-accent/10 text-accent border border-accent/20' : 'bg-primary/10 text-primary border border-primary/20'}`}>
-                                  {task.status}
-                                </span>
-                              )}
-                              {task.time && <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 font-medium">{task.time}</span>}
-                            </div>
-                          ))}
-                        </div>
+                      {message.agent && (
+                        <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-primary">
+                          {message.agent}
+                        </span>
                       )}
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                       {renderSources(message.sources)}
                     </div>
                   </div>
@@ -186,7 +175,7 @@ export default function ChatArea() {
                     <p className="text-sm leading-relaxed">{message.content}</p>
                   </div>
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex-shrink-0 flex items-center justify-center text-primary border border-primary/10">
-                    <span className="text-[10px] font-bold">A</span>
+                    <span className="text-[10px] font-bold">{initials(actor?.nombre)}</span>
                   </div>
                 </div>
               )}
